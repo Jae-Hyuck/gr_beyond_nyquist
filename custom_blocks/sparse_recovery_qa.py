@@ -21,12 +21,12 @@
 
 from gnuradio import gr, gr_unittest
 from gnuradio import blocks
-from custom_blocks.L1Recovery import L1Recovery
-from utils.my_recovery import amplitude_vector, perm_dftmtx, chipping_matrix, acc_dump_matrix
+from custom_blocks.sparse_recovery import SparseRecovery
+from utils import sparse_recovery as sr
 import numpy as np
 
 
-class qa_L1Recovery (gr_unittest.TestCase):
+class qa_SparseRecovery(gr_unittest.TestCase):
 
     def setUp(self):
         self.tb = gr.top_block()
@@ -42,28 +42,26 @@ class qa_L1Recovery (gr_unittest.TestCase):
         assert high_rate % low_rate == 0
 
         # signal
-        s = amplitude_vector(high_rate, n_tones)
+        signal_amps = sr.amplitude_vector(high_rate, n_tones)
 
         # demodulator matrices
-        F = perm_dftmtx(high_rate)
-        F = F.real
-        D = chipping_matrix(high_rate)
-        H = acc_dump_matrix(low_rate, high_rate)
-        M = np.dot(H, D)
-        Phi = np.dot(M, F)
+        repr_mat = sr.perm_dftmtx(high_rate)
+        D = sr.chipping_matrix(high_rate)
+        H = sr.acc_dump_matrix(low_rate, high_rate)
+        measure_mat = np.dot(H, D)
+        overall_mat = np.dot(measure_mat, repr_mat)
 
-        s = s.real
         # output = system * input
-        y = np.dot(Phi, s)
+        y = np.dot(overall_mat, signal_amps)
 
         #########################
-        src1 = blocks.vector_source_f(y.flatten().tolist())
-        scr1_1 = blocks.stream_to_vector(4, low_rate)
+        src1 = blocks.vector_source_c(y.flatten().tolist())
+        scr1_1 = blocks.stream_to_vector(8, low_rate)
         src2 = blocks.vector_source_f(np.diag(D))
         scr2_1 = blocks.stream_to_vector(4, high_rate)
-        recovered = L1Recovery(high_rate, low_rate)
-        recovered_1 = blocks.vector_to_stream(4, high_rate)
-        dst = blocks.vector_sink_f()
+        recovered = SparseRecovery(high_rate, low_rate)
+        recovered_1 = blocks.vector_to_stream(8, high_rate)
+        dst = blocks.vector_sink_c()
 
         # set up fg
         self.tb.connect(src1, scr1_1)
@@ -73,14 +71,14 @@ class qa_L1Recovery (gr_unittest.TestCase):
         self.tb.connect(recovered, recovered_1)
         self.tb.connect(recovered_1, dst)
         self.tb.run()
-        # check data
 
+        # check data
         result_data = dst.data()
         print(result_data)
 
         # ground truth
-        print(np.dot(F, s))
+        print(np.dot(repr_mat, signal_amps))
 
 
 if __name__ == '__main__':
-    gr_unittest.run(qa_L1Recovery, "qa_L1Recovery.xml")
+    gr_unittest.run(qa_SparseRecovery, "qa_SparseRecovery.xml")

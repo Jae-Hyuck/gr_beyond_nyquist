@@ -21,21 +21,21 @@
 
 import numpy as np
 from gnuradio import gr
-from utils import my_recovery
+from utils import sparse_recovery as sr
 
 
-class L1Recovery(gr.sync_block):
+class SparseRecovery(gr.sync_block):
     """
-    docstring for block L1Recovery
+    docstring for block
     """
     def __init__(self, high_rate, low_rate):
         self.high_rate = high_rate
         self.low_rate = low_rate
         gr.sync_block.__init__(
             self,
-            name="L1Recovery",
-            in_sig=[(np.float32, low_rate), (np.float32, high_rate)],
-            out_sig=[(np.float32, high_rate)])
+            name='SparseRecovery',
+            in_sig=[(np.complex64, low_rate), (np.float32, high_rate)],
+            out_sig=[(np.complex64, high_rate)])
 
     def work(self, input_items, output_items):
         low_rate_sample = input_items[0]
@@ -44,7 +44,7 @@ class L1Recovery(gr.sync_block):
 
         n = low_rate_sample.shape[0]
         for i in range(n):
-            out[i, :] = my_recovery.run(low_rate_sample[i], chipping_seq[i],
-                                        self.high_rate, self.low_rate)
+            out[i, :] = sr.run(low_rate_sample[i], chipping_seq[i],
+                               self.high_rate, self.low_rate)
 
         return len(output_items[0])

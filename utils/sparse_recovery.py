@@ -1,7 +1,10 @@
 import numpy as np
 import math
 import scipy.linalg as la
-from sklearn.linear_model import OrthogonalMatchingPursuit
+
+import matlab.engine
+eng = matlab.engine.start_matlab()
+eng.addpath('utils/sparsify_0_5/GreedLab')
 
 
 def amplitude_vector(high_rate, n_tones):
@@ -36,21 +39,26 @@ def run(low_rate_samples, chipping_seq, high_rate, low_rate):
 
     # demodulator matrices
     repr_mat = perm_dftmtx(high_rate)
-    repr_mat = repr_mat.real
     D = np.diagflat(chipping_seq)
     H = acc_dump_matrix(low_rate, high_rate)
     measure_mat = np.dot(H, D)
     overall_mat = np.dot(measure_mat, repr_mat)
 
     # reconstruction
-    omp = OrthogonalMatchingPursuit(n_nonzero_coefs=10)
-    omp.fit(overall_mat, low_rate_samples)
-    coef = omp.coef_
+    overall_mat_matlab = matlab.double(list(overall_mat.flatten('F')),
+                                       size=overall_mat.shape,
+                                       is_complex=True)
+    y_matlab = matlab.double(list(low_rate_samples),
+                             size=(low_rate, 1),
+                             is_complex=True)
+    coef = eng.greed_gp(y_matlab, overall_mat_matlab, overall_mat.shape[1])
+    coef = np.array(coef._real) + 1j * np.array(coef._imag)
     high_rate_samples = np.dot(repr_mat, coef)
 
     return high_rate_samples
 
 
+# toy example
 if __name__ == '__main__':
     # parameters
     n_tones = 5
@@ -60,11 +68,9 @@ if __name__ == '__main__':
 
     # signal
     signal_amps = amplitude_vector(high_rate, n_tones)
-    signal_amps = signal_amps.real
 
     # demodulator matrices
     repr_mat = perm_dftmtx(high_rate)
-    repr_mat = repr_mat.real
     D = chipping_matrix(high_rate)
     H = acc_dump_matrix(low_rate, high_rate)
     measure_mat = np.dot(H, D)
@@ -74,9 +80,14 @@ if __name__ == '__main__':
     y = np.dot(overall_mat, signal_amps)
 
     # reconstruction
-    omp = OrthogonalMatchingPursuit()  # (n_nonzero_coefs=n_tones)
-    omp.fit(overall_mat, y)
-    coef = omp.coef_
+    overall_mat_matlab = matlab.double(list(overall_mat.flatten('F')),
+                                       size=overall_mat.shape,
+                                       is_complex=True)
+    y_matlab = matlab.double(list(y),
+                             size=(low_rate, 1),
+                             is_complex=True)
+    coef = eng.greed_gp(y_matlab, overall_mat_matlab, overall_mat.shape[1])
+    coef = np.array(coef._real) + 1j * np.array(coef._imag)
 
     # compare
     print(np.dot(repr_mat, signal_amps))
